@@ -114,8 +114,13 @@ Local development stores cached datasets and selected property state in `data/da
    - `GOOGLE_CLIENT_SECRET`
    - `GOOGLE_REDIRECT_URI`
    - `BLOB_READ_WRITE_TOKEN` (optional on Hobby; without it the app uses local ephemeral cache)
+   - `DASHBOARD_ACCESS_PASSWORD` (optional shared password gate for the whole URL)
 5. Redeploy after env vars are in place.
 6. Add the deployed callback URL to your Google OAuth Web Application client.
+
+### Shared password access on Hobby
+
+Vercel's built-in production Password Protection is not available on the Hobby plan. This project includes an app-level password gate instead. If you set `DASHBOARD_ACCESS_PASSWORD`, visitors must enter that shared password before they can access the dashboard URL.
 
 ## Project Structure
 

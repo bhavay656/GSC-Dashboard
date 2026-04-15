@@ -43,6 +43,8 @@ type DashboardResponse = {
   lastSyncedAt: string | null;
 };
 
+type DashboardRow = DashboardResponse["rows"][number];
+
 const DEFAULT_SUMMARY: DashboardResponse["summary"] = {
   totals: {
     totalQueries: 0,
@@ -59,6 +61,146 @@ const DEFAULT_SUMMARY: DashboardResponse["summary"] = {
     avgPositionByProduct: []
   }
 };
+
+function applyClientFilters(
+  rows: DashboardRow[],
+  filters: {
+    intent: string;
+    product: string;
+    keywordContains: string;
+    pageContains: string;
+    minPosition: string;
+    maxPosition: string;
+    sortBy: string;
+    sortDirection: string;
+  }
+) {
+  const minPosition =
+    filters.minPosition.trim() === "" ? null : Number(filters.minPosition);
+  const maxPosition =
+    filters.maxPosition.trim() === "" ? null : Number(filters.maxPosition);
+
+  return rows.filter((row) => {
+    if (filters.intent !== "All" && row.intent !== filters.intent) {
+      return false;
+    }
+
+    if (filters.product !== "All" && row.product !== filters.product) {
+      return false;
+    }
+
+    if (
+      filters.keywordContains &&
+      !row.query.toLowerCase().includes(filters.keywordContains.toLowerCase())
+    ) {
+      return false;
+    }
+
+    if (
+      filters.pageContains &&
+      !row.page.toLowerCase().includes(filters.pageContains.toLowerCase())
+    ) {
+      return false;
+    }
+
+    if (Number.isFinite(minPosition) && minPosition !== null && row.position < minPosition) {
+      return false;
+    }
+
+    if (Number.isFinite(maxPosition) && maxPosition !== null && row.position > maxPosition) {
+      return false;
+    }
+
+    return true;
+  });
+}
+
+function sortClientRows(rows: DashboardRow[], filters: { sortBy: string; sortDirection: string }) {
+  const direction = filters.sortDirection === "asc" ? 1 : -1;
+  const sortBy = filters.sortBy as keyof DashboardRow;
+
+  return [...rows].sort((left, right) => {
+    const leftValue = left[sortBy];
+    const rightValue = right[sortBy];
+
+    if (leftValue === rightValue) {
+      return 0;
+    }
+
+    if (typeof leftValue === "number" && typeof rightValue === "number") {
+      return (leftValue - rightValue) * direction;
+    }
+
+    return String(leftValue).localeCompare(String(rightValue)) * direction;
+  });
+}
+
+function summarizeRows(rows: DashboardRow[]): DashboardResponse["summary"] {
+  const totalQueries = rows.length;
+  const totalClicks = rows.reduce((sum, row) => sum + row.clicks, 0);
+  const totalImpressions = rows.reduce((sum, row) => sum + row.impressions, 0);
+  const avgCtr = totalImpressions === 0 ? 0 : totalClicks / totalImpressions;
+  const avgPosition =
+    totalQueries === 0 ? 0 : rows.reduce((sum, row) => sum + row.position, 0) / totalQueries;
+
+  const keywordsByIntent = Object.entries(
+    rows.reduce<Record<string, number>>((acc, row) => {
+      acc[row.intent] = (acc[row.intent] ?? 0) + 1;
+      return acc;
+    }, {})
+  ).map(([label, value]) => ({ label, value }));
+
+  const keywordsByProduct = Object.entries(
+    rows.reduce<Record<string, number>>((acc, row) => {
+      acc[row.product] = (acc[row.product] ?? 0) + 1;
+      return acc;
+    }, {})
+  ).map(([label, value]) => ({ label, value }));
+
+  const clicksByIntent = Object.entries(
+    rows.reduce<Record<string, number>>((acc, row) => {
+      acc[row.intent] = (acc[row.intent] ?? 0) + row.clicks;
+      return acc;
+    }, {})
+  ).map(([label, value]) => ({ label, value }));
+
+  const clicksByProduct = Object.entries(
+    rows.reduce<Record<string, number>>((acc, row) => {
+      acc[row.product] = (acc[row.product] ?? 0) + row.clicks;
+      return acc;
+    }, {})
+  ).map(([label, value]) => ({ label, value }));
+
+  const avgPositionByProduct = Object.entries(
+    rows.reduce<Record<string, { total: number; count: number }>>((acc, row) => {
+      const current = acc[row.product] ?? { total: 0, count: 0 };
+      current.total += row.position;
+      current.count += 1;
+      acc[row.product] = current;
+      return acc;
+    }, {})
+  ).map(([label, stats]) => ({
+    label,
+    value: stats.count === 0 ? 0 : stats.total / stats.count
+  }));
+
+  return {
+    totals: {
+      totalQueries,
+      totalClicks,
+      totalImpressions,
+      avgCtr,
+      avgPosition
+    },
+    breakdowns: {
+      keywordsByIntent,
+      keywordsByProduct,
+      clicksByIntent,
+      clicksByProduct,
+      avgPositionByProduct
+    }
+  };
+}
 
 function formatDateInput(date: Date) {
   return date.toISOString().slice(0, 10);
@@ -141,7 +283,7 @@ export function DashboardShell({
 }) {
   const [properties, setProperties] = useState<Property[]>([]);
   const [selectedProperty, setSelectedProperty] = useState("");
-  const [dashboard, setDashboard] = useState<DashboardResponse>({
+  const [baseDashboard, setBaseDashboard] = useState<DashboardResponse>({
     summary: DEFAULT_SUMMARY,
     rows: [],
     lastSyncedAt: null
@@ -161,15 +303,29 @@ export function DashboardShell({
     sortDirection: "desc"
   });
 
+  const filteredRows = useMemo(
+    () => applyClientFilters(baseDashboard.rows, filters),
+    [baseDashboard.rows, filters]
+  );
+
+  const dashboard = useMemo<DashboardResponse>(
+    () => ({
+      summary: summarizeRows(filteredRows),
+      rows: sortClientRows(filteredRows, filters),
+      lastSyncedAt: baseDashboard.lastSyncedAt
+    }),
+    [baseDashboard.lastSyncedAt, filteredRows, filters]
+  );
+
   const productOptions = useMemo(() => {
-    const products = new Set(dashboard.rows.map((row) => row.product));
+    const products = new Set(baseDashboard.rows.map((row) => row.product));
     return ["All", ...Array.from(products).sort()];
-  }, [dashboard.rows]);
+  }, [baseDashboard.rows]);
 
   const intentOptions = useMemo(() => {
-    const intents = new Set(dashboard.rows.map((row) => row.intent));
+    const intents = new Set(baseDashboard.rows.map((row) => row.intent));
     return ["All", ...Array.from(intents)];
-  }, [dashboard.rows]);
+  }, [baseDashboard.rows]);
 
   async function loadProperties() {
     setError("");
@@ -195,7 +351,7 @@ export function DashboardShell({
     return nextProperty;
   }
 
-  async function loadDashboard(propertyUrl: string, nextFilters = filters, nextDates = dates) {
+  async function loadDashboard(propertyUrl: string, nextDates = dates) {
     if (!propertyUrl) {
       return;
     }
@@ -203,34 +359,8 @@ export function DashboardShell({
     const params = new URLSearchParams({
       propertyUrl,
       dateFrom: nextDates.dateFrom,
-      dateTo: nextDates.dateTo,
-      sortBy: nextFilters.sortBy,
-      sortDirection: nextFilters.sortDirection
+      dateTo: nextDates.dateTo
     });
-
-    if (nextFilters.intent !== "All") {
-      params.set("intent", nextFilters.intent);
-    }
-
-    if (nextFilters.product !== "All") {
-      params.set("product", nextFilters.product);
-    }
-
-    if (nextFilters.keywordContains) {
-      params.set("keywordContains", nextFilters.keywordContains);
-    }
-
-    if (nextFilters.pageContains) {
-      params.set("pageContains", nextFilters.pageContains);
-    }
-
-    if (nextFilters.minPosition) {
-      params.set("minPosition", nextFilters.minPosition);
-    }
-
-    if (nextFilters.maxPosition) {
-      params.set("maxPosition", nextFilters.maxPosition);
-    }
 
     const response = await fetch(`/api/dashboard?${params.toString()}`);
 
@@ -239,7 +369,7 @@ export function DashboardShell({
     }
 
     const data = (await response.json()) as DashboardResponse;
-    setDashboard(data);
+    setBaseDashboard(data);
     setStatus(data.rows.length ? "Dashboard ready." : "No cached data yet. Run a refresh.");
   }
 
@@ -288,7 +418,7 @@ export function DashboardShell({
             throw new Error(payload?.error ?? "Search Console sync failed.");
           }
 
-          await loadDashboard(selectedProperty);
+          await loadDashboard(selectedProperty, dates);
           setStatus("Search Console data synced successfully.");
         })
         .catch((syncError: Error) => {
@@ -314,7 +444,7 @@ export function DashboardShell({
             throw new Error("Unable to save the selected property.");
           }
 
-          await loadDashboard(propertyUrl);
+          await loadDashboard(propertyUrl, dates);
         })
         .catch((propertyError: Error) => {
           setError(propertyError.message);
@@ -325,17 +455,25 @@ export function DashboardShell({
   function applyFilterChange(name: string, value: string) {
     const nextFilters = { ...filters, [name]: value };
     setFilters(nextFilters);
-
-    startTransition(() => {
-      loadDashboard(selectedProperty, nextFilters).catch((dashboardError: Error) => {
-        setError(dashboardError.message);
-      });
-    });
+    setError("");
   }
 
   function handleDateChange(name: "dateFrom" | "dateTo", value: string) {
     const nextDates = { ...dates, [name]: value };
     setDates(nextDates);
+
+    if (!selectedProperty) {
+      return;
+    }
+
+    startTransition(() => {
+      setError("");
+      setStatus("Loading cached data for the new date range...");
+      loadDashboard(selectedProperty, nextDates).catch((dashboardError: Error) => {
+        setError(dashboardError.message);
+        setStatus("Unable to load the selected date range.");
+      });
+    });
   }
 
   const exportUrl = useMemo(() => {
@@ -370,12 +508,7 @@ export function DashboardShell({
       sortDirection: nextDirection
     };
     setFilters(nextFilters);
-
-    startTransition(() => {
-      loadDashboard(selectedProperty, nextFilters).catch((dashboardError: Error) => {
-        setError(dashboardError.message);
-      });
-    });
+    setError("");
   }
 
   return (
