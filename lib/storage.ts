@@ -3,7 +3,9 @@ import path from "node:path";
 import { del, list, put } from "@vercel/blob";
 import { getOptionalEnv } from "@/lib/env";
 
-const LOCAL_STATE_PATH = path.join(process.cwd(), "data", "dashboard-state.json");
+const LOCAL_STATE_PATH = process.env.VERCEL
+  ? path.join("/tmp", "gsc-dashboard-state.json")
+  : path.join(process.cwd(), "data", "dashboard-state.json");
 const BLOB_PATH = "gsc-keyword-intelligence/state.json";
 
 type StoredRow = {
