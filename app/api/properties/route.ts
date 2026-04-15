@@ -3,6 +3,9 @@ import { auth } from "@/lib/auth";
 import { listSearchConsoleProperties } from "@/lib/google";
 import { getUserPreference } from "@/lib/dashboard";
 
+export const dynamic = "force-dynamic";
+export const runtime = "nodejs";
+
 export async function GET(request: NextRequest) {
   const session = await auth();
 

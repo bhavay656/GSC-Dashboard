@@ -1,6 +1,9 @@
 import NextAuth from "next-auth";
 import { getAuthOptions } from "@/lib/auth";
 
+export const dynamic = "force-dynamic";
+export const runtime = "nodejs";
+
 export async function GET(request: Request, context: { params: { nextauth: string[] } }) {
   return NextAuth(getAuthOptions())(request, context);
 }

@@ -3,6 +3,9 @@ import { auth } from "@/lib/auth";
 import { syncSearchConsoleData } from "@/lib/google";
 import { saveUserPreference } from "@/lib/dashboard";
 
+export const dynamic = "force-dynamic";
+export const runtime = "nodejs";
+
 export async function POST(request: NextRequest) {
   const session = await auth();
 
