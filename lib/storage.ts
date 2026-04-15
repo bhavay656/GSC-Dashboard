@@ -106,7 +106,7 @@ async function writeBlobState(state: DashboardState) {
   }
 
   await put(BLOB_PATH, JSON.stringify(state, null, 2), {
-    access: "private" as never,
+    access: "public",
     addRandomSuffix: false,
     contentType: "application/json",
     token: blobToken
