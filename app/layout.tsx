@@ -1,5 +1,4 @@
 import type { Metadata } from "next";
-import { auth } from "@/lib/auth";
 import { Providers } from "@/components/providers";
 import "./globals.css";
 
@@ -13,12 +12,10 @@ export default async function RootLayout({
 }: Readonly<{
   children: React.ReactNode;
 }>) {
-  const session = await auth();
-
   return (
     <html lang="en">
       <body>
-        <Providers session={session}>{children}</Providers>
+        <Providers>{children}</Providers>
       </body>
     </html>
   );
