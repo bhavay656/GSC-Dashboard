@@ -7,7 +7,7 @@ import { buildCacheKey } from "@/lib/utils";
 import { enrichKeywordRow } from "@/lib/enrichment";
 
 const CACHE_TTL_MS = 1000 * 60 * 60 * 12;
-const PAGE_SIZE = 25000;
+const PAGE_SIZE = 5000;
 
 async function refreshGoogleAccessToken(refreshToken: string) {
   const response = await fetch("https://oauth2.googleapis.com/token", {
@@ -137,50 +137,38 @@ export async function syncSearchConsoleData(input: {
     intentPriorityScore: number;
   }> = [];
 
-  let startRow = 0;
+  const response = await searchconsole.searchanalytics.query({
+    siteUrl: propertyUrl,
+    requestBody: {
+      startDate: dateFrom,
+      endDate: dateTo,
+      dimensions: ["query", "page"],
+      // Hobby deployments benefit from a capped initial sync rather than
+      // attempting to exhaust every row in one request cycle.
+      rowLimit: PAGE_SIZE,
+      startRow: 0
+    }
+  });
 
-  while (true) {
-    const response = await searchconsole.searchanalytics.query({
-      siteUrl: propertyUrl,
-      requestBody: {
-        startDate: dateFrom,
-        endDate: dateTo,
-        dimensions: ["query", "page"],
-        rowLimit: PAGE_SIZE,
-        startRow
-      }
+  const batch = response.data.rows ?? [];
+
+  for (const row of batch) {
+    const query = row.keys?.[0] ?? "(not provided)";
+    const page = row.keys?.[1] ?? "";
+    const enrichment = enrichKeywordRow(query, page);
+
+    rows.push({
+      id: `${cacheKey}-0-${rows.length}`,
+      query,
+      page,
+      clicks: row.clicks ?? 0,
+      impressions: row.impressions ?? 0,
+      ctr: row.ctr ?? 0,
+      position: row.position ?? 0,
+      intent: enrichment.intent,
+      product: enrichment.product,
+      intentPriorityScore: enrichment.intentPriorityScore
     });
-
-    const batch = response.data.rows ?? [];
-
-    if (!batch.length) {
-      break;
-    }
-
-    for (const row of batch) {
-      const query = row.keys?.[0] ?? "(not provided)";
-      const page = row.keys?.[1] ?? "";
-      const enrichment = enrichKeywordRow(query, page);
-
-      rows.push({
-        id: `${cacheKey}-${startRow}-${rows.length}`,
-        query,
-        page,
-        clicks: row.clicks ?? 0,
-        impressions: row.impressions ?? 0,
-        ctr: row.ctr ?? 0,
-        position: row.position ?? 0,
-        intent: enrichment.intent,
-        product: enrichment.product,
-        intentPriorityScore: enrichment.intentPriorityScore
-      });
-    }
-
-    if (batch.length < PAGE_SIZE) {
-      break;
-    }
-
-    startRow += PAGE_SIZE;
   }
 
   await saveCachedRows(userId, cacheKey, {
