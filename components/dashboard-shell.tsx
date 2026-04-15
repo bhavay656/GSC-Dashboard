@@ -282,7 +282,10 @@ export function DashboardShell({
       })
         .then(async (response) => {
           if (!response.ok) {
-            throw new Error("Search Console sync failed.");
+            const payload = (await response.json().catch(() => null)) as
+              | { error?: string }
+              | null;
+            throw new Error(payload?.error ?? "Search Console sync failed.");
           }
 
           await loadDashboard(selectedProperty);
