@@ -2,7 +2,7 @@ import { google } from "googleapis";
 import { getToken } from "next-auth/jwt";
 import type { NextRequest } from "next/server";
 import { getCachedRows, saveCachedRows } from "@/lib/storage";
-import { env } from "@/lib/env";
+import { getRequiredEnv } from "@/lib/env";
 import { buildCacheKey } from "@/lib/utils";
 import { enrichKeywordRow } from "@/lib/enrichment";
 
@@ -16,8 +16,8 @@ async function refreshGoogleAccessToken(refreshToken: string) {
       "Content-Type": "application/x-www-form-urlencoded"
     },
     body: new URLSearchParams({
-      client_id: env.GOOGLE_CLIENT_ID,
-      client_secret: env.GOOGLE_CLIENT_SECRET,
+      client_id: getRequiredEnv("GOOGLE_CLIENT_ID"),
+      client_secret: getRequiredEnv("GOOGLE_CLIENT_SECRET"),
       grant_type: "refresh_token",
       refresh_token: refreshToken
     })
@@ -46,7 +46,7 @@ async function refreshGoogleAccessToken(refreshToken: string) {
 async function getGoogleSession(request: NextRequest) {
   const token = await getToken({
     req: request,
-    secret: env.NEXTAUTH_SECRET
+    secret: getRequiredEnv("NEXTAUTH_SECRET")
   });
 
   if (!token?.sub || typeof token.accessToken !== "string") {
@@ -78,9 +78,9 @@ async function getGoogleSession(request: NextRequest) {
 async function getSearchConsoleClient(request: NextRequest) {
   const session = await getGoogleSession(request);
   const auth = new google.auth.OAuth2(
-    env.GOOGLE_CLIENT_ID,
-    env.GOOGLE_CLIENT_SECRET,
-    env.GOOGLE_REDIRECT_URI
+    getRequiredEnv("GOOGLE_CLIENT_ID"),
+    getRequiredEnv("GOOGLE_CLIENT_SECRET"),
+    getRequiredEnv("GOOGLE_REDIRECT_URI")
   );
 
   auth.setCredentials({ access_token: session.accessToken });

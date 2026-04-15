@@ -1,7 +1,7 @@
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { del, list, put } from "@vercel/blob";
-import { env } from "@/lib/env";
+import { getOptionalEnv } from "@/lib/env";
 
 const LOCAL_STATE_PATH = path.join(process.cwd(), "data", "dashboard-state.json");
 const BLOB_PATH = "gsc-keyword-intelligence/state.json";
@@ -53,9 +53,15 @@ async function writeLocalState(state: DashboardState) {
 
 async function readBlobState() {
   try {
+    const blobToken = getOptionalEnv("BLOB_READ_WRITE_TOKEN");
+
+    if (!blobToken) {
+      return DEFAULT_STATE;
+    }
+
     const result = await list({
       prefix: BLOB_PATH,
-      token: env.BLOB_READ_WRITE_TOKEN
+      token: blobToken
     });
 
     const blob = result.blobs.find((entry) => entry.pathname === BLOB_PATH);
@@ -78,15 +84,22 @@ async function readBlobState() {
 }
 
 async function writeBlobState(state: DashboardState) {
+  const blobToken = getOptionalEnv("BLOB_READ_WRITE_TOKEN");
+
+  if (!blobToken) {
+    await writeLocalState(state);
+    return;
+  }
+
   const result = await list({
     prefix: BLOB_PATH,
-    token: env.BLOB_READ_WRITE_TOKEN
+    token: blobToken
   });
   const existing = result.blobs.find((entry) => entry.pathname === BLOB_PATH);
 
   if (existing) {
     await del(existing.url, {
-      token: env.BLOB_READ_WRITE_TOKEN
+      token: blobToken
     });
   }
 
@@ -94,12 +107,12 @@ async function writeBlobState(state: DashboardState) {
     access: "private" as never,
     addRandomSuffix: false,
     contentType: "application/json",
-    token: env.BLOB_READ_WRITE_TOKEN
+    token: blobToken
   });
 }
 
 async function readState() {
-  if (env.BLOB_READ_WRITE_TOKEN) {
+  if (getOptionalEnv("BLOB_READ_WRITE_TOKEN")) {
     return readBlobState();
   }
 
@@ -107,7 +120,7 @@ async function readState() {
 }
 
 async function writeState(state: DashboardState) {
-  if (env.BLOB_READ_WRITE_TOKEN) {
+  if (getOptionalEnv("BLOB_READ_WRITE_TOKEN")) {
     await writeBlobState(state);
     return;
   }

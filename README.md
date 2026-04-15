@@ -105,16 +105,17 @@ Local development stores cached datasets and selected property state in `data/da
 
 1. Push this repo to GitHub.
 2. Import the GitHub repo into Vercel.
-3. Set the production environment variables in Vercel:
+3. Hobby plan note: the app now builds even before secrets are added, so you can import first and then configure env vars in Vercel project settings.
+4. Set the production environment variables in Vercel:
    - `APP_BASE_URL`
    - `NEXTAUTH_URL`
    - `NEXTAUTH_SECRET`
    - `GOOGLE_CLIENT_ID`
    - `GOOGLE_CLIENT_SECRET`
    - `GOOGLE_REDIRECT_URI`
-   - `BLOB_READ_WRITE_TOKEN`
-4. Redeploy after env vars are in place.
-5. Add the deployed callback URL to your Google OAuth Web Application client.
+   - `BLOB_READ_WRITE_TOKEN` (optional on Hobby; without it the app uses local ephemeral cache)
+5. Redeploy after env vars are in place.
+6. Add the deployed callback URL to your Google OAuth Web Application client.
 
 ## Project Structure
 
